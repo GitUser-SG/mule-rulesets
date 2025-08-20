@@ -1,0 +1,7 @@
+openapi: "3.0.0"
+info:
+  title: example API
+  version: "1.0.0"
+paths:
+  /v2/orders/{orderId}/items: {}
+  /api/v1/users/{id}/posts/{postId}: {}

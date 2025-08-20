@@ -1,0 +1,11 @@
+{
+  "main": "api-specification-ruleset.yaml",
+  "name": "API Specification Requirements",
+  "assetId": "api-specification-ruleset",
+  "version": "1.0.0",
+  "type": "ruleset",
+  "dependencies": [],
+  "tags": ["specification", "api-governance", "compliance", "custom"],
+  "descriptorVersion": "1.0.0",
+  "description": "Comprehensive ruleset implementing Mulesoft API Specification requirements including mandatory violations, warnings, and optional guidelines."
+}

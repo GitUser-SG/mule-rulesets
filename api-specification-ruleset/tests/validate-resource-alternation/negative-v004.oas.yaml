@@ -1,0 +1,7 @@
+openapi: "3.0.0"
+info:
+  title: example API
+  version: "1.0.0"
+paths:
+  /{customerId}/{userId}: {}
+  /users/{id}/{userId}/posts: {}

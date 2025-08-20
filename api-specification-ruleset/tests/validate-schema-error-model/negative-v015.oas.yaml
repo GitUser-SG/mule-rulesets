@@ -1,0 +1,28 @@
+openapi: "3.0.0"
+info:
+  title: example API
+  version: "1.0.0"
+paths:
+  /v1/process:
+    post:
+      responses:
+        '400':
+          description: Invalid input
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StandardErrorResponse'
+components:
+  schemas:
+    ProcessRequest:
+      type: object
+      properties:
+        data:
+          type: string
+    StandardErrorResponse:
+      type: object
+      properties:
+        errorCode: { type: string }
+        errorMessage: { type: string }
+        errorStatus: { type: integer }
+        errorDetails: { type: object }

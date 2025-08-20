@@ -1,0 +1,20 @@
+openapi: "3.0.0"
+info:
+  title: example API
+  version: "1.0.0"
+paths:
+  /v1/users:
+    put:
+      summary: Activate users
+      responses:
+        '200':
+          description: Users activated
+          content:
+            application/xml: {}
+    patch:
+      summary: Activate users
+      responses:
+        '200':
+          description: Users activated
+          content:
+            text/plain: {}

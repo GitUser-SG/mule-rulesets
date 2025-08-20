@@ -1,0 +1,10 @@
+openapi: "3.0.0"
+info:
+  title: example API
+  version: "1.0.0"
+servers:
+  - url: api.scd.{env}.test.net/v1.0/scd
+  - url: api.scd.{env}.test.net/v2.1.1/scd
+  - url: api.scd.{env}.test.net/scd
+  - url: api.scd.{env}.test.net/version2/scd
+paths: {}

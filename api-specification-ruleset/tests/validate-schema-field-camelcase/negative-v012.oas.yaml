@@ -1,0 +1,27 @@
+openapi: "3.0.3"
+info:
+  title: example API
+  version: "1.0.0"
+paths:
+  /users:
+    delete:
+      responses:
+        "200":
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserDTO'
+components:
+  schemas:
+    UserDTO:
+      type: object
+      properties:
+        UserId:
+          type: number
+        name-new:
+          type: string
+        email_New_User:
+          type: string
+        ROLE:
+          type: string

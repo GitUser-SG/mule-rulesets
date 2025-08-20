@@ -1,0 +1,33 @@
+openapi: "3.0.0"
+info:
+  title: example API
+  version: "1.0.0"
+paths:
+  /v1/reports:generate:
+    get:
+      summary: Generate reports
+      responses:
+        '200':
+          description: Reports generated successfully
+  /v1/users:search:
+    post:
+      summary: Search users
+      responses:
+        '200':
+          description: Search results
+  /v1/users:
+    get:
+      summary: Get users
+      responses:
+        '200':
+          description: List of users
+    post:
+      summary: Create user
+      responses:
+        '201':
+          description: User created
+    put:
+      summary: Update user
+      responses:
+        '200':
+          description: User updated

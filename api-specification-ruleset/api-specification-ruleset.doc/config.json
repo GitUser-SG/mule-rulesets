@@ -1,0 +1,3 @@
+{ 
+"pageOrder": ["home", "validate-version-major-only", "validate-query-param-snakecase", "validate-wildcard-hyphen", "validate-resource-alternation", "validate-resource-camelcase", "validate-resource-uniqueness", "validate-resource-verb-restriction", "validate-rpc-async-restriction", "validate-rpc-methods", "validate-rpc-preposition-restriction", "validate-rpc-verb-restriction", "validate-schema-field-camelcase", "validate-schema-preposition-restriction", "validate-schema-verb-restriction", "validate-schema-error-model", "validate-server-endpoint", "recommend-json-format"]
+}

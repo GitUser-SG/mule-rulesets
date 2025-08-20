@@ -1,0 +1,981 @@
+#%Validation Profile 1.0
+profile: Mulesoft API Specification
+description: >-
+  This ruleset enforces Mulesoft API Specification requirements for enterprise-grade
+  APIs. It includes mandatory compliance rules (MUST), recommended practices (SHOULD),
+  and optional guidelines (MAY) based on Mulesoft's API governance standards.
+
+violation:
+  - validate-version-major-only #V001
+  - validate-query-param-snakecase #V002
+  - validate-wildcard-hyphen #V003
+  - validate-resource-alternation #V004
+  - validate-resource-camelcase #V005
+  - validate-resource-uniqueness #V006
+  - validate-resource-verb-restriction #V007
+  - validate-rpc-async-restriction #V008
+  - validate-rpc-methods #V009
+  - validate-rpc-preposition-restriction #V010
+  - validate-rpc-verb-restriction #V011
+  - validate-schema-field-camelcase #V012
+  - validate-schema-preposition-restriction #V013
+  - validate-schema-verb-restriction #V014
+  - validate-schema-error-model #V015
+  - validate-server-endpoint #V016
+
+warning:
+  - recommend-json-format #W001
+
+tags:
+  - custom
+  - api-governance
+  - compliance
+  - specification
+
+validations:
+
+# ===== VIOLATIONS
+
+  # V001: API endpoints MUST only contain a major version identifier
+  validate-version-major-only:
+    message: 'API endpoint "{{core.urlTemplate}}" MUST contain major version identifier (e.g., /v1/, not /v1.1/)'
+    documentation: >
+      Version identifiers in API paths should only include major versions.
+    targetClass: apiContract.Server
+    propertyConstraints:
+      core.urlTemplate:
+        pattern: '.*/v[0-9]+(/.*)?$'
+    examples:
+      valid: |
+        openapi: "3.0.0"
+        info:
+          version: 1.0.0
+          title: valid example
+        servers:
+          - url: https://api.example.com/api/v1
+            description: Production server
+          - url: https://staging.example.com/api/v2
+            description: Staging server
+      invalid: |
+        openapi: "3.0.0"
+        info:
+          version: 1.0.0
+          title: invalid example
+        servers:
+          - url: https://example.com/api/v1.1
+          - url: https://example.com/api/version1.1
+
+  # V002: Multi-word query parameters MUST use lower_snake_case
+  validate-query-param-snakecase:
+    message: 'Query parameter "{{apiContract.paramName}}" MUST use lower_snake_case'
+    documentation: >
+      Multi-word query parameters and their values must use lower_snake_case
+      convention for consistency.
+    targetClass: apiContract.Parameter
+    rego: |
+      # Get parameter properties
+      binding_value = $node["http://a.ml/vocabularies/apiContract#binding"]
+      param_name = $node["http://a.ml/vocabularies/apiContract#paramName"]
+
+      # Check if this is a query parameter with invalid snake_case
+      is_invalid = {
+        true |
+          binding_value == "query"
+          not regex.match("^[a-z][a-z0-9]*(_[a-z0-9]+)*$", param_name)
+      }
+
+      # Rule passes if there are no invalid patterns found
+      $result = count(is_invalid) == 0
+    examples:
+      valid: |
+        openapi: "3.0.0"
+          info:
+            version: 1.0.0
+            title: valid example
+        parameters:
+          - name: created_date
+          - name: order_status
+          - name: order
+      invalid: |
+        openapi: "3.0.0"
+          info:
+            version: 1.0.0
+            title: invalid example
+        parameters:
+          - name: createdDate
+          - name: OrderStatus
+          - name: Order-Id
+
+  # V003: APIs reading across multiple collections MUST use hyphen (-) as wildcard
+  validate-wildcard-hyphen:
+    message: 'Path "{{apiContract.path}}" SHOULD use hyphen (-) as wildcard character instead of other symbols'
+    documentation: >
+      When APIs need to read across multiple collections, use hyphen (-) as the
+      wildcard character for consistency.
+    targetClass: apiContract.EndPoint
+    not:
+      or:
+        - propertyConstraints:
+            apiContract.path:
+              pattern: '.*\/\*\/.*'
+        - propertyConstraints:
+            apiContract.path:
+              pattern: '.*\/all\/.*'
+        - propertyConstraints:
+            apiContract.path:
+              pattern: '.*\/_\/.*'
+        - propertyConstraints:
+            apiContract.path:
+              pattern: '.*\/~\/.*'
+    examples:
+      valid: |
+        openapi: "3.0.0"
+          info:
+            version: 1.0.0
+            title: valid example
+        paths:
+          /v1/users/-/orders:
+            get:
+      invalid: |
+        openapi: "3.0.0"
+          info:
+            version: 1.0.0
+            title: invalid example
+        paths:
+          /v1/users/*/orders:
+            get:
+          /v1/users/all/orders:
+            get:
+          /v1/users/_/orders:
+            get:
+
+  # V004: Endpoint naming MUST alternate between resource identifiers and values
+  validate-resource-alternation:
+    message: 'Path "{{apiContract.path}}" contains consecutive parameters which MUST be avoided'
+    documentation: >
+      API paths should follow the pattern of alternating between resource identifiers
+      and parameter values for clear hierarchical structure.
+    targetClass: apiContract.EndPoint
+    rego: |
+      # Extract path segments
+      path_segments = split(trim($node["http://a.ml/vocabularies/apiContract#path"], "/"), "/")
+
+      # Filter out empty segments and version
+      filtered_segments = [segment |
+        segment = path_segments[_]
+        segment != ""
+        not regex.match("^v[0-9]+$", segment)
+      ]
+
+      # Check if path is valid
+      is_valid = {
+        true |
+          # Must have segments
+          count(filtered_segments) > 0
+          # Find consecutive parameters
+          consecutive_params = [i |
+            i = numbers.range(1, count(filtered_segments)-1)[_]
+            regex.match("^\\{.*\\}$", filtered_segments[i-1])
+            regex.match("^\\{.*\\}$", filtered_segments[i])
+          ]
+          count(consecutive_params) == 0
+      }
+
+      $result = count(is_valid) > 0
+    examples:
+      valid: |
+        openapi: "3.0.0"
+          info:
+            version: 1.0.0
+            title: valid example
+        paths:
+          /v1/users/{userId}/orders/{orderId}:
+            get:
+      invalid: |
+        openapi: "3.0.0"
+          info:
+            version: 1.0.0
+            title: invalid example
+        paths:
+          /v1/users/orders/{userId}/{orderId}:
+            get:
+
+  # V005: Multi-word resource identifiers MUST use camelCase
+  validate-resource-camelcase:
+    message: 'Resource identifier in path "{{apiContract.path}}" SHOULD use camelCase for multi-word resources'
+    documentation: >
+      Multi-word resource identifiers must use camelCase convention.
+    targetClass: apiContract.EndPoint
+    not:
+      propertyConstraints:
+        apiContract.path:
+          pattern: '.*/([^/{}\s]{2,}[-_][^/{}\s]*|[^/{}\s]*[-_][^/{}\s]{2,}|[A-Z][^/{}\s]*|[A-Z_]{2,})(/.*|$)'
+    examples:
+      valid: |
+        openapi: "3.0.0"
+        info:
+          version: 1.0.0
+          title: valid example
+        paths:
+          /{applicationId}/auth/entitlements:
+            get:
+          /orderItems:
+            get:
+          /api/-/users:
+            get:
+      invalid: |
+        openapi: "3.0.0"
+        info:
+          version: 1.0.0
+          title: invalid example
+        paths:
+          /{applicationId}/order-items:
+            get:
+          /user_profiles:
+            get:
+
+  # V006: Resource identifiers MUST be unique within a single URL
+  validate-resource-uniqueness:
+    message: 'Path "{{apiContract.path}}" contains duplicate resource identifiers'
+    documentation: >
+      Resource identifiers must be unique within a single URL path to avoid
+      ambiguity and confusion.
+    targetClass: apiContract.EndPoint
+    rego: |
+      # Extract path segments excluding parameters
+      path_segments = split(trim($node["http://a.ml/vocabularies/apiContract#path"], "/"), "/")
+
+      # Filter out version segments and path parameters
+      resource_segments = [segment |
+        segment = path_segments[_]
+        not regex.match("^v[0-9]+$", segment)
+        not regex.match("^{.*}$", segment)
+        segment != ""
+      ]
+
+      # Check for duplicates
+      unique_segments = {segment | segment = resource_segments[_]}
+
+      $result = count(resource_segments) == count(unique_segments)
+    examples:
+      valid: |
+        openapi: "3.0.0"
+          info:
+            version: 1.0.0
+            title: valid example
+        paths:
+          /v1/users/{userId}/orders/{orderId}:
+            get:
+      invalid: |
+        openapi: "3.0.0"
+          info:
+            version: 1.0.0
+            title: invalid example
+        paths:
+          /v1/users/{id}/users/{userId}:
+            get:
+
+  # V007: Resources MUST NOT include verbs
+  validate-resource-verb-restriction:
+    message: 'Resource identifier in path "{{apiContract.path}}" contains verbs. Resources MUST NOT
+      include verbs except when preceded by colon (:) for RPC operations'
+    documentation: >
+      REST resources should represent entities (nouns), not actions (verbs).
+      Use HTTP methods (GET, POST, PUT, DELETE) to represent actions.
+      RPC operations using colon syntax (e.g., /users:activate) are exempt.
+    targetClass: apiContract.EndPoint
+    rego: |
+      # Define blacklisted verbs
+      forbidden_verbs = [
+        "get", "create", "update", "delete", "list", "fetch", "execute", "retrieve", "set", "invoke", "cancel", "subscribe", "unsubscribe", "query", "monitor", "remove", "save", "load", "search", "process", "handle", "manage", "perform", "pause", "resume", "reset", "clear", "receive", "edit", "modify", "change", "insert", "upload","download", "export", "import", "refresh", "reload", "validate", "verify", "calculate", "compute", "generate", "activate", "deactivate", "enable", "disable", "connect", "disconnect"
+      ]
+
+      # Get the path from the endpoint
+      path := $node["http://a.ml/vocabularies/apiContract#path"]
+
+      # Skip RPC endpoints (those containing colon)
+      not contains(path, ":")
+
+      # Extract path segments (split by / and filter out empty)
+      path_segments := [segment |
+        segment := split(path, "/")[_]
+        segment != ""
+        not startswith(segment, "{")  # Skip path parameters
+      ]
+
+      # Check each segment for forbidden verbs (simple substring matching)
+      violations := [violation |
+        segment := path_segments[_]
+        lower_segment := lower(segment)
+        verb := forbidden_verbs[_]
+        contains(lower_segment, verb)
+        violation := verb
+      ]
+
+      $result := count(violations) == 0
+    examples:
+      valid: |
+        openapi: "3.0.0"
+        info:
+          version: 1.0.0
+          title: valid example
+        paths:
+          /users:
+          /orders:
+          /products/{productId}:
+          /users:activate:    # RPC operation - allowed
+          /reports:generate:  # RPC operation - allowed
+      invalid: |
+        openapi: "3.0.0"
+        info:
+          version: 1.0.0
+          title: invalid example
+        paths:
+          /getUsers:
+          /createOrder:
+          /updateUser:
+          /deleteProduct:
+          /searchResults:
+
+  # V008: RPC command names MUST NOT use "Async"
+  validate-rpc-async-restriction:
+    message: 'RPC operation in path "{{apiContract.path}}" MUST not use "async" in command name'
+    documentation: >
+      RPC command names must not include "async" to maintain consistency in
+      naming conventions.
+    targetClass: apiContract.EndPoint
+    not:
+      propertyConstraints:
+        apiContract.path:
+          pattern: '.*:[a-zA-Z]*[Aa][Ss][Yy][Nn][Cc][a-zA-Z]*.*'
+    examples:
+      valid: |
+        paths:
+          /v1/users:activate:
+            post:
+              summary: Activate users
+          /v1/orders:process:
+            post:
+              summary: Process orders
+      invalid: |
+        paths:
+          /v1/users:activateAsync:
+            post:
+              summary: Invalid async naming
+          /v1/orders:processAsync:
+            post:
+              summary: Invalid async naming
+
+  # V009: RPC operations MUST only use GET or POST methods
+  validate-rpc-methods:
+    message: 'RPC operation with method "{{apiContract.method}}" MUST only use GET or POST methods.'
+    documentation: >
+      RPC operations (identified by colon syntax) are only allowed with GET or POST
+      HTTP methods to maintain consistency.
+    targetClass: apiContract.Operation
+    rego: |
+      # Get the endpoint that contains this operation
+      target_class[endpoints_raw] with data.class as "http://a.ml/vocabularies/apiContract#EndPoint"
+      endpoints = nodes_array with data.nodes as endpoints_raw
+      endpoint := endpoints[_]
+
+      # Check if this operation belongs to the endpoint
+      operations_in_endpoint = nodes_array with data.nodes as endpoint["http://a.ml/vocabularies/apiContract#supportedOperation"]
+      operation_in_endpoint = operations_in_endpoint[_]
+      operation_in_endpoint["@id"] = $node["@id"]
+
+      # Get the endpoint path
+      path = endpoint["http://a.ml/vocabularies/apiContract#path"]
+
+      # Check if the path contains colon (:) indicating RPC operation
+      contains(path, ":")
+
+      # Get the operation method
+      method = $node["http://a.ml/vocabularies/apiContract#method"]
+
+      # Check if method is GET or POST (allowed methods)
+      allowed_methods = ["get", "post"]
+      $result = method in allowed_methods
+    examples:
+      valid: |
+        paths:
+          /v1/users:activate:
+            post:
+              summary: Activate users
+          /v1/reports:generate:
+            get:
+              summary: Generate reports
+      invalid: |
+        paths:
+          /v1/users:activate:
+            put:
+              summary: Invalid method for RPC
+          /v1/users:deactivate:
+            delete:
+              summary: Invalid method for RPC
+
+  # V010: RPC command names MUST NOT include prepositions
+  validate-rpc-preposition-restriction:
+    message: 'RPC command "{{apiContract.path}}" contains prepositions.'
+    documentation: >
+      RPC commands should use simple verbs without prepositions. Keep command
+      names concise and action-focused.
+    targetClass: apiContract.EndPoint
+    rego: |
+      forbidden_prepositions_lowercase = [
+        "about",
+        "above",
+        "across",
+        "after",
+        "against",
+        "along",
+        "among",
+        "around",
+        "at",
+        "before",
+        "behind",
+        "below",
+        "beneath",
+        "beside",
+        "between",
+        "beyond",
+        "by",
+        "down",
+        "during",
+        "except",
+        "for",
+        "from",
+        "in",
+        "into",
+        "near",
+        "of",
+        "off",
+        "on",
+        "over",
+        "through",
+        "to",
+        "under",
+        "until",
+        "up",
+        "upon",
+        "with",
+        "within",
+        "without"
+      ]
+
+        forbidden_prepositions_uppercase = [
+        "About",
+        "Above",
+        "Across",
+        "After",
+        "Against",
+        "Along",
+        "Among",
+        "Around",
+        "At",
+        "Before",
+        "Behind",
+        "Below",
+        "Beneath",
+        "Beside",
+        "Between",
+        "Beyond",
+        "By",
+        "Down",
+        "During",
+        "Except",
+        "For",
+        "From",
+        "In",
+        "Into",
+        "Near",
+        "Of",
+        "Off",
+        "On",
+        "Over",
+        "Through",
+        "To",
+        "Under",
+        "Until",
+        "Up",
+        "Upon",
+        "With",
+        "Within",
+        "Without"
+      ]
+
+      # Get the path from the endpoint
+      path := $node["http://a.ml/vocabularies/apiContract#path"]
+
+      # Only check RPC endpoints (those containing colon)
+      contains(path, ":")
+
+      # Extract the RPC command part (after the colon)
+      colon_index := indexof(path, ":")
+      rpc_command := substring(path, colon_index + 1, -1)
+
+      # Pattern 1: Check if field starts with a preposition followed by uppercase
+      # (e.g., "ofUser", "forOrder", "withPayment")
+      start_violations = {prep |
+        prep := forbidden_prepositions_lowercase[_]
+        regex.match(sprintf(`^%s[A-Z]`, [prep]), rpc_command)
+      }
+
+      # Pattern 2: Check for prepositions between words in camelCase
+      # After lowercase letter (e.g., "emailOfUser", "dateForOrder")
+      middle_violations = {prep |
+        prep := forbidden_prepositions_uppercase[_]
+        regex.match(sprintf(`[a-z]%s[A-Z]`, [prep]), rpc_command)
+      }
+
+      # Pattern 3: Check for prepositions at the end after lowercase
+      # (e.g., "userEmailOf", "userFor")
+      end_violations = {prep |
+        prep := forbidden_prepositions_uppercase[_]
+        regex.match(sprintf(`[a-z]%s$`, [prep]), rpc_command)
+      }
+
+      all_violations := start_violations | middle_violations | end_violations
+
+      $result := count(all_violations) == 0
+    examples:
+      valid: |
+        paths:
+          /users:activate:
+          /orders:process:
+          /reports:generate:
+          /accounts:suspend:
+          /notifications:send:
+      invalid: |
+        paths:
+          /users:activateFor:     # Contains preposition 'for'
+          /orders:processWit:     # Contains preposition 'with'
+          /reports:generateFor:   # Contains preposition 'for'
+          /accounts:suspendBy:    # Contains preposition 'by'
+          /data:exportTo:         # Contains preposition 'to'
+
+  # V011: RPC verbs MUST NOT use standard method verbs
+  validate-rpc-verb-restriction:
+    message: 'RPC operation in path "{{apiContract.path}}" MUST NOT use standard REST verbs (get, list, create, update, delete)'
+    documentation: >
+      RPC command names must not use standard REST method verbs to avoid confusion
+      with standard REST operations.
+    targetClass: apiContract.EndPoint
+    not:
+      or:
+        - propertyConstraints:
+            apiContract.path:
+              pattern: '.*:[gG][eE][tT]:?($|/.*)'
+        - propertyConstraints:
+            apiContract.path:
+              pattern: '.*:[lL][iI][sS][tT]:?($|/.*)'
+        - propertyConstraints:
+            apiContract.path:
+              pattern: '.*:[cC][rR][eE][aA][tT][eE]:?($|/.*)'
+        - propertyConstraints:
+            apiContract.path:
+              pattern: '.*:[uU][pP][dD][aA][tT][eE]:?($|/.*)'
+        - propertyConstraints:
+            apiContract.path:
+              pattern: '.*:[dD][eE][lL][eE][tT][eE]:?($|/.*)'
+        - propertyConstraints:
+            apiContract.path:
+              pattern: '.*:[fF][eE][tT][cC][hH]:?($|/.*)'
+        - propertyConstraints:
+            apiContract.path:
+              pattern: '.*:[rR][eE][tT][rR][iI][eE][vV][eE]:?($|/.*)'
+    examples:
+      valid: |
+        paths:
+          /v1/users:activate:
+            post:
+              summary: Activate users
+          /v1/orders:process:
+            post:
+              summary: Process orders
+      invalid: |
+        paths:
+          /v1/users:create:
+            post:
+              summary: Invalid RPC verb
+          /v1/users:update:
+            post:
+              summary: Invalid RPC verb
+
+  # V012: Request and response body fields MUST implement camelCase
+  validate-schema-field-camelcase:
+    message: 'Field name "{{shacl.name}}" SHOULD use camelCase'
+    documentation: >
+      Request and response body field names must use camelCase convention
+      for consistency across API specifications.
+    targetClass: shacl.PropertyShape
+    propertyConstraints:
+      shacl.name:
+        pattern: '^[a-z][a-zA-Z0-9]*$'
+    examples:
+      valid: |
+        components:
+          schemas:
+            User:
+              type: object
+              properties:
+                firstName:
+                  type: string
+                lastName:
+                  type: string
+                emailAddress:
+                  type: string
+      invalid: |
+        components:
+          schemas:
+            User:
+              type: object
+              properties:
+                first_name:
+                  type: string
+                LastName:
+                  type: string
+                email-address:
+                  type: string
+
+  # V013: Request and response body field names MUST NOT have prepositions
+  validate-schema-preposition-restriction:
+    message: 'Field "{{shacl.name}}" contains prepositions.'
+    documentation: >
+      Field names should be concise and avoid prepositions. Use direct
+      relationships instead. For example, use 'userEmail' instead of 'emailOfUser'.
+    targetClass: shacl.PropertyShape
+    rego: |
+      # Define common prepositions (both cases for camelCase detection)
+      forbidden_prepositions_lowercase = [
+        "about",
+        "above",
+        "across",
+        "after",
+        "against",
+        "along",
+        "among",
+        "around",
+        "at",
+        "before",
+        "behind",
+        "below",
+        "beneath",
+        "beside",
+        "between",
+        "beyond",
+        "by",
+        "down",
+        "during",
+        "except",
+        "for",
+        "from",
+        "in",
+        "into",
+        "near",
+        "of",
+        "off",
+        "on",
+        "over",
+        "through",
+        "to",
+        "under",
+        "until",
+        "up",
+        "upon",
+        "with",
+        "within",
+        "without"
+      ]
+
+        forbidden_prepositions_uppercase = [
+        "About",
+        "Above",
+        "Across",
+        "After",
+        "Against",
+        "Along",
+        "Among",
+        "Around",
+        "At",
+        "Before",
+        "Behind",
+        "Below",
+        "Beneath",
+        "Beside",
+        "Between",
+        "Beyond",
+        "By",
+        "Down",
+        "During",
+        "Except",
+        "For",
+        "From",
+        "In",
+        "Into",
+        "Near",
+        "Of",
+        "Off",
+        "On",
+        "Over",
+        "Through",
+        "To",
+        "Under",
+        "Until",
+        "Up",
+        "Upon",
+        "With",
+        "Within",
+        "Without"
+      ]
+
+      # Get field name
+      field_name := $node["http://www.w3.org/ns/shacl#name"]
+
+      # Pattern 1: Check if field starts with a preposition followed by uppercase
+      # (e.g., "ofUser", "forOrder", "withPayment")
+      start_violations = {prep |
+        prep := forbidden_prepositions_lowercase[_]
+        regex.match(sprintf(`^%s[A-Z]`, [prep]), field_name)
+      }
+
+      # Pattern 2: Check for prepositions between words in camelCase
+      # After lowercase letter (e.g., "emailOfUser", "dateForOrder")
+      middle_violations = {prep |
+        prep := forbidden_prepositions_uppercase[_]
+        regex.match(sprintf(`[a-z]%s[A-Z]`, [prep]), field_name)
+      }
+
+      # Pattern 3: Check for prepositions at the end after lowercase
+      # (e.g., "userEmailOf", "userFor")
+      end_violations = {prep |
+        prep := forbidden_prepositions_uppercase[_]
+        regex.match(sprintf(`[a-z]%s$`, [prep]), field_name)
+      }
+
+      all_violations := start_violations | middle_violations | end_violations
+
+      $result := count(all_violations) == 0
+    examples:
+      valid: |
+        components:
+          schemas:
+            User:
+              properties:
+                userEmail:
+                orderDate:
+                customerAddress:
+                accountBalance:
+      invalid: |
+        components:
+          schemas:
+            User:
+              properties:
+                emailOfUser:
+                dateForOrder:
+                addressOfCustomer:
+                balanceWithTax:
+                priceFromVendor:
+
+  # V014: API schemas MUST NOT include words "Request", "Response", or any verbs
+  validate-schema-verb-restriction:
+    message: 'Schema "{{shacl.name}}" contains forbidden words incl. "Request", "Response", or verbs.'
+    documentation: >
+      Schema names should represent domain entities, not operations or message
+      wrappers. Use descriptive nouns that represent the business concept.
+    targetClass: shacl.NodeShape
+    rego: |
+      # Define forbidden verbs (same as V002)
+      forbidden_verbs = ["get", "create", "update", "delete", "list", "fetch", "execute", "retrieve", "set", "invoke", "cancel", "subscribe", "unsubscribe", "query", "monitor", "remove", "save", "load", "search", "process", "handle", "manage", "perform", "pause", "resume", "reset", "clear", "receive", "edit", "modify", "change", "insert", "upload","download", "export", "import", "refresh", "reload", "validate", "verify", "calculate", "compute", "generate", "activate", "deactivate", "enable", "disable", "connect", "disconnect"]
+
+      # Define forbidden request/response words
+      forbidden_wrappers = ["request", "response"]
+
+      # Get schema name
+      schema_name := $node["http://www.w3.org/ns/shacl#name"]
+      lower_name := lower(schema_name)
+
+      # Check for request/response patterns
+      wrapper_violations := [word |
+        word := forbidden_wrappers[_]
+        contains(lower_name, word)
+      ]
+
+      # Check for verb patterns
+      verb_violations := [verb |
+        verb := forbidden_verbs[_]
+        # Check if name contains the verb
+        contains(lower_name, verb)
+      ]
+
+      all_violations := array.concat(wrapper_violations, verb_violations)
+
+      $result := count(all_violations) == 0
+    examples:
+      valid: |
+        components:
+          schemas:
+            User:
+            Order:
+            Customer:
+      invalid: |
+        components:
+          schemas:
+            UserRequest:
+            OrderResponse:
+            CreateUser:
+            UpdateOrder:
+
+  # V015: All APIs MUST adhere to standardized error message model
+  validate-schema-error-model:
+    message: 'Schemas used in error responses MUST include required error fields: apiVersion, errorCode, errorMessage, errorStatus'
+    documentation: >
+      All schemas used in HTTP 4xx and 5xx error responses must implement the
+      standardized error response model containing the following required fields:
+      - apiVersion: String indicating the API version
+      - errorCode: String with a specific error code identifier
+      - errorMessage: String with human-readable error description
+      - errorStatus: Integer with HTTP status code
+      - errorDetails: Object with additional error information (optional)
+    targetClass: apiContract.WebAPI
+    rego: |
+      # Find all operations in the API
+      target_class[operations_raw] with data.class as "http://a.ml/vocabularies/apiContract#Operation"
+      operations = nodes_array with data.nodes as operations_raw
+
+      # Find all error responses (4xx, 5xx status codes)
+      error_responses = [response |
+        operation = operations[_]
+        nested_nodes[responses] with data.nodes as object.get(operation, "http://a.ml/vocabularies/apiContract#returns", [])
+        response = responses[_]
+        status_code = response["http://a.ml/vocabularies/apiContract#statusCode"]
+        regex.match("^[45][0-9][0-9]$", status_code)
+      ]
+
+      # Get schemas actually used by these error responses
+      error_response_schemas = {schema |
+        response = error_responses[_]
+        nested_nodes[payloads] with data.nodes as object.get(response, "http://a.ml/vocabularies/apiContract#payload", [])
+        payload = payloads[_]
+        schema = find with data.link as payload["http://a.ml/vocabularies/shapes#schema"]
+      }
+
+      # Required fields for error response
+      required_fields = {"apiVersion", "errorCode", "errorMessage", "errorStatus"}
+
+      # Check if error response schemas have all required fields
+      valid_error_schemas = [schema |
+        schema = error_response_schemas[_]
+
+        # Get all properties of this schema
+        nested_nodes[properties] with data.nodes as object.get(schema, "http://www.w3.org/ns/shacl#property", [])
+
+        # Extract property names
+        property_names = {name |
+          property = properties[_]
+          name = property["http://www.w3.org/ns/shacl#name"]
+        }
+
+        # Check if all required fields are present
+        missing_fields = required_fields - property_names
+        count(missing_fields) == 0
+      ]
+
+      # Result: All schemas used in error responses must be valid
+      # If no error responses exist, rule passes
+      $result = count(valid_error_schemas) == count(error_response_schemas)
+    examples:
+      valid: |
+        paths:
+          /v1/users:
+            get:
+              responses:
+                '400':
+                  description: Bad Request
+                  content:
+                    application/json:
+                      schema:
+                        $ref: '#/components/schemas/ErrorResponse'
+        components:
+          schemas:
+            ErrorResponse:
+              type: object
+              required:
+                - apiVersion
+                - errorCode
+                - errorMessage
+                - errorStatus
+      invalid: |
+        paths:
+          /v1/users:
+            get:
+              responses:
+                '400':
+                  description: Bad Request
+                  content:
+                    application/json:
+                      schema:
+                        $ref: '#/components/schemas/BadErrorResponse'
+
+        components:
+          schemas:
+            BadErrorResponse:
+              type: object
+              properties:
+                message:
+                  type: string
+
+  # V016: The API specification MUST explicitly include server endpoint details
+  validate-server-endpoint:
+    message: 'API specification MUST include server endpoint details'
+    documentation: >
+      At least one server endpoint should be defined in the API specification
+    targetClass: apiContract.WebAPI
+    propertyConstraints:
+      apiContract.server:
+        minCount: 1
+    examples:
+      valid: |
+        openapi: "3.0.0"
+        info:
+          version: 1.0.0
+          title: valid example
+        servers:
+          - url: https://api.example.com/api/v1
+            description: Production server
+          - url: https://staging.example.com/api/v2
+            description: Staging server
+      invalid: |
+        openapi: "3.0.0"
+        info:
+          version: 1.0.0
+          title: invalid example
+        paths: {}
+
+# ===== WARNINGS
+
+  # W001: Request and response body models SHOULD use "application/json"
+  recommend-json-format:
+    message: 'Consider using "application/json" as the preferred media type instead of "{{core.mediaType}}"'
+    documentation: >
+      While other media types are allowed, "application/json" is the recommended
+      format for request and response bodies for better interoperability.
+    targetClass: apiContract.Payload
+    propertyConstraints:
+      core.mediaType:
+        in:
+          - application/json
+    examples:
+      valid: |
+        requestBody:
+          content:
+            application/json: {}
+        responses:
+          '201':
+            content:
+              application/json: {}
+      invalid: |
+        requestBody:
+          content:
+            application/xml: {}
+            text/plain: {}

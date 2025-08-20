@@ -1,0 +1,38 @@
+openapi: "3.0.0"
+info:
+  title: example API
+  version: "1.0.0"
+paths:
+  /users:
+    get:
+      parameters:
+        - name: createdDate
+          schema:
+            type: string
+        - name: OrderStatus
+          schema:
+            type: string
+        - name: CUSTOMER-TYPE
+          schema:
+            type: string
+        - name: delivery-type
+          schema:
+            type: string
+        - name: Train-Case
+          schema:
+            type: string
+        - name: USER-ID
+          schema:
+            type: string
+        - name: CUSTOMERORDER
+          schema:
+            type: string
+        - name: Customer_Type
+          schema:
+            type: string
+        - name: customer.type
+          schema:
+            type: string
+        - name: CUSTOMER_TYPE
+          schema:
+            type: string
